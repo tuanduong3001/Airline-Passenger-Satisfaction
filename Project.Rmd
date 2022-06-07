@@ -1,0 +1,505 @@
+---
+title: "Airline Passenger Satisfaction"
+author: "Nhóm 7"
+date: '2022-05-20'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Thành viên
+
+-   Võ Đình Vĩnh Chương 19133012
+-   Dương Thanh Tuấn 19133004
+-   Tôn Thất Gia Bảo 19133009
+-   Nguyễn Đức Toàn 19133058
+
+## Mô tả
+
+Tập dữ liệu này chứa một cuộc khảo sát về mức độ hài lòng của hành khách hàng không. Được chia làm 2 file csv gồm: train.csv và test.csv và được chia theo phương pháp hold out theo tỉ lệ 8/2. Trong đó file train chiếm 80% (103903 thực thể) và file test chiếm 20% (25975 thực thể). Qua đó cho thấy toàn bộ dữ liệu có gần 130000 thực thể và 23 features như:
+
+-   Gender: Giới tính của khách hàng (nam, nữ)
+
+-   Customer Type: Loại khách hàng (khách hàng thân thiết, khách hàng không thân thiết)
+
+-   Age: tuổi của khách hàng
+
+-   Type of Travel: Mục đích chuyến bay của hành khách (du lịch cá nhân, đi công tác)
+
+-   Class: Hạng du lịch trên máy bay của hành khách (Business, Eco, Eco Plus)
+
+-   Flight distance: khoảng cách chuyến bay
+
+-   Inflight wifi service: Mức độ hài lòng về dịch vụ wifi trên chuyến bay (0: Không áp dụng; 1-5)
+
+-   Departure/Arrival time convenient: Mức độ hài lòng về Thời gian Đi / Đến thuận tiện
+
+-   Ease of Online booking: Mức độ hài lòng khi đặt vé trực tuyến
+
+-   Gate location: Mức độ hài lòng về vị trí cồng
+
+-   Food and drink: Mức độ hài lòng về Đồ ăn và thức uống
+
+-   Online boarding: Mức độ hài lòng của nội trú trực tuyến
+
+-   Seat comfort: Mức độ hài lòng về sự thoải mái của chỗ ngồi
+
+-   Inflight entertainment: Mức độ hài lòng của giải trí trên chuyến bay
+
+-   On-board service: Mức độ hài lòng của dịch vụ trên máy bay
+
+-   Leg room service: Mứcc độ hài lòng của dịch vụ phòng chờ
+
+-   Baggage handling: Mức độ hài lòng của việc xếp dỡ hành lý
+
+-   Check-in service: Mức độ hài lòng của dịch vụ check-in
+
+-   Inflight service: Mức độ hài lòng của dịch vụ trên chuyến bay
+
+-   Cleanliness: Mức độ hài lòng về sự Sạch sẽ
+
+-   Departure Delay in Minutes: Bị hoãn vài phút khi khởi hành
+
+-   Arrival Delay in Minutes: Bị Chậm Phút Khi Đến Nơi
+
+-   Satisfaction: Mức độ hài lòng của hãng hàng không (Hài lòng, trung lập hoặc không hài lòng)
+
+## Import library
+
+```{r, warning=FALSE, message=FALSE}
+library(tidyverse)
+library(caret)
+library(DataExplorer)
+library(kknn)
+library(tree)
+library(randomForest)
+library(corrplot)
+```
+
+## Data Load
+
+```{r}
+train_set<-read.csv("train.csv",stringsAsFactors = T) # tập train
+train_set[c(1,2)]<-NULL # loại bỏ cột X và id
+test_set<-read.csv("test.csv",stringsAsFactors = T) # tập test
+test_set[c(1,2)]<-NULL # như trên
+options(scipen = 999)
+```
+
+Sau khi import datase nhóm thấy có 2 cột bị thừa ở 2 dataset đó là cột X và id nên nhóm đã quyết định loại bỏ 2 cột này
+
+## Tổng quan về dữ liệu và tính toán giá trị NA
+
+# Một vài dữ liệu trong dataset
+
+```{r}
+head(train_set)
+```
+
+```{r}
+head(test_set)
+```
+
+# Tóm tắt dữ liệu
+
+```{r}
+str(train_set)
+```
+
+```{r}
+str(test_set)
+```
+
+# Tính toán giá trị NA
+
+```{r}
+# Train data
+plot_missing(train_set,title='NA value in Train dataset')
+```
+
+```{r}
+# Test data
+plot_missing(test_set,title="NA value in Test dataset")
+```
+
+Qua đó ta có thể thấy được trong biến Arrival.Delay.in.Minutes có chứa N/A value và nó chỉ chiếm tỉ lệ rất thấp (trong đó ở tập train là 300 dòng có giá trị NA chiếm 0.3% còn ở tập test là 80 dòng chiếm 0.32%). Vì thế quyết định sẽ dùng hàm drop_na để loại bỏ những dòng này
+
+```{r}
+#Train data
+train_set<-drop_na(train_set)
+plot_missing(train_set,title="Train dataset after using drop_na")
+```
+
+```{r}
+#Train data
+test_set<-drop_na(test_set)
+plot_missing(test_set,title="Test dataset after using drop_na")
+```
+
+Bây giờ thì không còn bất cứ missing value nào
+
+## EDA trong tập dữ liệu
+
+# Trực quan biến số trong tập dữ liệu 
+
+Sau khi quan sát tập dữ liệu nhóm thấy có 4 cột là Numeric. Từ đó nhóm đã cố gắng xây dựng 1 vài biểu đồ để có thể tìm ra "Sự khác biệt của phân phối giữa các cột này khi chúng được chia thành hài lòng hoặc không hài lòng
+
+```{r}
+# age histogram
+age1 <- ggplot(data=train_set, aes(x=Age))+
+  geom_density(fill="lightblue",color="black", alpha=0.8)+
+  labs(title="Distribution of Age",subtitle = "Airline Passenger Satisfaction")
+age1
+```
+
+Qua biểu đồ trên chúng ta có thể thấy độ tuổi từ 20 đến gần 60 có nhu cầu sử dụng dịch vụ hàng không nhiều hơn so với các độ tuổi còn lại
+
+```{r}
+age2<-train_set%>%
+  mutate(satisfaction = recode(satisfaction,'0'="neutral or dissatisfied", `1` = "satisfied"))%>%
+  ggplot(aes(x=Age,fill=satisfaction))+
+  geom_density(alpha=0.5)+
+  labs(x=NULL)+
+  theme_bw()+
+  facet_wrap(~satisfaction)
+age2
+```
+
+```{r}
+# Flight distance histogram
+flight1<-ggplot(train_set,aes(x=Flight.Distance))+
+  geom_density(fill="lightblue",color="black",alpha=0.8)+
+  labs(title="Distribution of Flight.Distance",subtitle = "Airline Passenger Satisfaction")
+flight1
+```
+
+Biểu đồ mô tả sự phân bố của khoảng cách chuyến bay. Khoảng cách từ 1000 km trở xuống chiếm tỉ trọng cao nhất
+
+```{r}
+flight2<-train_set%>%
+  mutate(satisfaction=recode(satisfaction,'0'="neutral or dissatisfied", `1` = "satisfied"))%>%
+  ggplot(aes(x=Flight.Distance,fill=satisfaction))+
+  geom_density(alpha=0.5)+
+  labs(x=NULL)+
+  theme_bw()+
+  facet_wrap(~satisfaction)
+flight2
+```
+
+Phân bố giữa khoảng cách chuyến bay với sự hài lòng của khách hàng
+
+```{r,warning=F}
+# Arrival.Delay.in.Minutes
+arrival1<-ggplot(train_set,aes(x=Arrival.Delay.in.Minutes))+
+  geom_density(fill="lightblue")+
+  scale_x_log10()+
+  labs(title = "Distribution of Arrival.Delay.in.Minutes", 
+       subtitle = "Airline Passenger Satisfaction")
+arrival1
+```
+
+Biểu đồ mô tả thời gian delay đến nơi của máy bay. Thời gian delay chủ yếu từ 10-100 phút
+
+```{r,warning=F}
+arrival2<-train_set%>%
+  mutate(satisfaction=recode(satisfaction,'0'="neutral or dissatisfied", `1` = "satisfied"))%>%
+  ggplot(aes(x=Arrival.Delay.in.Minutes,fill=satisfaction))+
+  geom_density(alpha=0.5)+
+  labs(x=NULL)+
+  theme_bw()+
+  scale_x_log10()+
+  facet_wrap(~satisfaction)
+arrival2
+```
+
+Biểu đồ mô tả mối liên quan giữa thời gian delay đến với sự hài lòng của khách hàng
+
+```{r,warning=F,message=F}
+# Departure.Delay.in.Minutes
+depar1<-ggplot(train_set,aes(x=Departure.Delay.in.Minutes))+
+  geom_density(fill="lightblue")+
+  xlim(0, 75) +
+  scale_x_log10()+
+  labs(title = "Distribution of Departure.Delay.in.Minutes", 
+       subtitle = "Airline Passenger Satisfaction")
+depar1
+```
+
+Biểu đồ mô tả thời gian delay đi của máy bay. Thời gian từ 10-100 phút chiếm ti trọng cao nhẩt
+
+```{r,warning=F,}
+depar2<-train_set%>%
+  mutate(satisfaction=recode(satisfaction,'0'="neutral or dissatisfied", `1` = "satisfied"))%>%
+  ggplot(aes(x=Departure.Delay.in.Minutes,fill=satisfaction))+
+  geom_density(alpha=0.5)+
+  labs(x=NULL)+
+  theme_bw()+
+  xlim(0,75)+
+  scale_x_log10()+
+  facet_wrap(~satisfaction)
+depar2
+```
+
+Biểu đồ mô tả mối liên quan giữa thời gian delay đi với sự hài lòng của khách hàng
+
+# Biến đánh giá trong tập dữ liệu
+
+```{r}
+train_set %>% 
+  select( ,7:13) %>% 
+  plot_histogram(theme_config = theme_bw(), 
+                 geom_histogram_args = list(fill = "salmon"),title = "Scored Variables distirbution in trainset(1)")
+
+```
+
+```{r}
+train_set%>% 
+  select(,14:20) %>% 
+  plot_histogram(theme_config = theme_bw(), 
+                 geom_histogram_args = list(fill = "lightblue"),title = "Scored Variables distirbution in trainset(2)")
+```
+
+Biểu đồ mo tả số điểm của hành khách đánh giá cho các dịch vụ hàng không
+
+```{r,warning=F}
+train_set%>% 
+   select(-c(Gender, Customer.Type, Type.of.Travel, Class,Age,Flight.Distance,Arrival.Delay.in.Minutes,Departure.Delay.in.Minutes)) %>%
+         mutate_at(vars(),funs(as.factor))  %>%
+         mutate(satisfaction = recode(satisfaction, `0` = "neutral or dissatisfied", `1` = "satisfied")) %>%
+         gather(key, value, Inflight.wifi.service:Cleanliness) %>% 
+         group_by(satisfaction, key, value) %>%
+         summarize(N = n()) %>%
+         ggplot(aes(x = value, y = N, fill = satisfaction)) +
+         geom_bar(stat = "identity", position = "fill", colour = "black", alpha = 0.75) +
+         theme_bw() +
+         facet_wrap(~key, scales = "free")
+```
+
+Sự phân bố của các dịch vụ đó và sự hài lòng của khách hàng thông qua dịch vụ
+
+# Biến ký tự trong tập dữ liệu
+
+```{r}
+c1 <-train_set%>% 
+  mutate(Gender = recode(Gender, `0` = "Female", `1` = "Male")) %>%
+  count(Gender) %>% 
+  ggplot(aes(x = Gender, y = n, fill = Gender)) +
+  geom_bar(stat = "identity", colour = "black", alpha = 0.75) +
+  geom_text(aes(label = n), position=position_dodge(width=0.9), vjust=-0.5) +
+  ylim(0, 60000) +
+  labs(y = "Count") +
+  theme_bw()  + ggtitle("Gender variable in Train Dataset")
+c1
+```
+
+Biểu đồ mô tả giới tính của khách hàng tham gia khảo sát. Khá cân bằng giữa nam và nữ
+
+```{r}
+c2 <- train_set%>% 
+  mutate(Customer.Type = recode(Customer.Type, `0` = "disloyal Customer", `1` = "Loyal Customer")) %>%
+  count(Customer.Type) %>% 
+  ggplot(aes(x = Customer.Type, y = n, fill = Customer.Type)) +
+  geom_bar(stat = "identity", colour = "black", alpha = 0.75) +
+  geom_text(aes(label = n), position=position_dodge(width=0.9), vjust=-0.5) +
+  ylim(0, 100000) +
+  labs(y = "Count") +
+  theme_bw() + ggtitle("Customer.Type variable in Train Dataset")
+c2
+```
+
+Biểu đồ mô tả sự phân bố của loại khách hàng. Khách hàng trung thành chiếm tỉ lệ vượt trội hơn so với phần còn lại
+
+```{r}
+c3 <- train_set%>% 
+  mutate(Type.of.Travel = recode(Type.of.Travel, `0` = "Business travel", `1` = "Personal Travel")) %>%
+  count(Type.of.Travel) %>% 
+  ggplot(aes(x = Type.of.Travel, y = n, fill = Type.of.Travel)) +
+  geom_bar(stat = "identity", colour = "black", alpha = 0.75) +
+  geom_text(aes(label = n), position=position_dodge(width=0.9), vjust=-0.5) +
+  ylim(0, 100000) +
+  labs(y = "Count") +
+  theme_bw()  + ggtitle("Type.of.Travel variable in Train Dataset")
+c3
+```
+
+Biểu đồ mô tả loại chuyến đi. Đi vì công việc chiếm tỉ trọng cao hơn phần còn lại
+
+```{r}
+c4 <- train_set%>% 
+  mutate(Class = recode(Class, `0` = "Business", `1` = "Eco",`2` = "Eco Plus")) %>%
+  count(Class) %>% 
+  ggplot(aes(x = Class, y = n, fill = Class)) +
+  geom_bar(stat = "identity", colour = "black", alpha = 0.75) +
+  geom_text(aes(label = n), position=position_dodge(width=0.9), vjust=-0.5) +
+  ylim(0, 100000) +
+  labs(y = "Count") +
+  theme_bw() + ggtitle("Class variable in Train Dataset")
+c4
+```
+
+Biểu đồ mô tả loại ghế trên máy bay. Ghế thương gia đứng đầu kế tiếp là ghế thường và cuối cùng là ghế thường plus
+
+```{r,warning=F}
+train_set%>% 
+   select(Gender, Customer.Type, Type.of.Travel, Class,satisfaction) %>% 
+         mutate_at(vars(Gender, Customer.Type, Type.of.Travel, Class,satisfaction),funs(as.factor)) %>%
+         mutate(satisfaction = recode(satisfaction, `0` = "neutral or dissatisfied", `1` = "satisfied")) %>%
+         gather(key, value, Class:Gender) %>% 
+         group_by(satisfaction, key, value) %>%
+         summarize(N = n()) %>%
+         ggplot(aes(x = value, y = N, fill = satisfaction)) +
+         geom_bar(stat = "identity", position = "fill", colour = "black", alpha = 0.75) +
+         theme_bw() +
+         facet_wrap(~key, scales = "free")
+```
+
+Biểu đồ mô tả mối liên quan giữa các biến ký tự với sự hài lòng của khách hàng
+
+## Machine Learning
+# Độ tương quan
+
+Trước tiên là tạo 1 tập dữ liệu giả để mô tả mối tương quan để tránh phải làm hư tổn tập dữ liệu thật
+
+```{r}
+# Train
+dm<-train_set
+dm$Gender<-as.numeric(dm$Gender)
+dm$Customer.Type<-as.numeric(dm$Customer.Type)
+dm$Type.of.Travel<-as.numeric(dm$Type.of.Travel)
+dm$Class<-as.numeric(dm$Class)
+dm$satisfaction<-as.numeric(dm$satisfaction)
+```
+
+```{r}
+# value 1
+tmp1<-dm%>% select(c(satisfaction,Gender,Customer.Type,Age,Type.of.Travel,Class,Flight.Distance,Inflight.wifi.service))
+corrplot(cor(tmp1), method = 'number')
+
+# value 2
+tmp2<-dm%>% select(c(satisfaction,Departure.Arrival.time.convenient,Ease.of.Online.booking,Gate.location, Food.and.drink,Online.boarding,Seat.comfort))
+corrplot(cor(tmp2), method = 'number')
+
+#value 3
+tmp3<-dm%>% select(c(satisfaction,Inflight.entertainment,On.board.service,Leg.room.service,Baggage.handling,Checkin.service,Inflight.service,Cleanliness,Departure.Delay.in.Minutes,Arrival.Delay.in.Minutes))
+corrplot(cor(tmp3), method = 'number')
+```
+
+Thông qua độ tương quan ta có thể rút ra các tham số có thể dùng để dự đoán bao gồm: Age, Customer.Type, Flight.Distance, Inflight.wifi.service, Ease.of.Online.booking, Food.and.drink, Online.boarding, Seat.comfort, Inflight.entertainment, On.board.service, Leg.room.service, Baggage.handling, Checkin.service, Inflight.service, Cleanliness
+
+# Kiểm tra dataset có cân bằng hay không
+
+Sử dụng hàm is.pbalanced để tìm câu trả lời
+
+```{r,warning=F}
+library(plm)
+df<-rbind(train_set,test_set)
+is.pbalanced(df)
+```
+
+# Knn
+
+Mô hình knn chọn k bằng 4 theo công thức k = sqrt(x). Trong đó x là biến dùng để dự đoán
+
+```{r}
+set.seed(1)
+knnmodel<-kknn(satisfaction ~ Age+Customer.Type+Flight.Distance+Inflight.wifi.service +Ease.of.Online.booking+Food.and.drink+Online.boarding+Seat.comfort +Inflight.entertainment+On.board.service+Leg.room.service+Baggage.handling+Checkin.service+Inflight.service+Cleanliness, train_set, test_set, k = 4, 
+            distance = 2, kernel = "rectangular")
+```
+
+# Đánh giá mô hình
+
+Để đánh giá mô hình ta sẽ tạo confusion matrix và tính độ đo accuracy từ kết quả dự đoán của mô hình và nhãn lớp thực sự trên tập dữ liệu test. Hàm accuracy nhận vào hai vector là actual (nhãn thật sự) và predicted (nhãn được dự đoán bởi mô hình) và trả ra giá trị accuracy.
+
+```{r}
+confusion_matrix<-function(predicted,actual) {
+  return(table(predicted,actual)[2:1,2:1])
+}
+
+accuracy<-function(cm) {
+  return(sum(diag(cm))/sum(cm))
+}
+```
+
+```{r}
+knnmodel.fit <- fitted(knnmodel)
+acctual<-test_set$satisfaction
+cm<-confusion_matrix(knnmodel.fit,acctual)
+cm
+```
+
+```{r}
+accuracy(cm)
+```
+
+# Decision Tree
+
+```{r}
+set.seed(2)
+tree.airline <- tree(satisfaction ~ Age+Customer.Type+Flight.Distance+Inflight.wifi.service +Ease.of.Online.booking+Food.and.drink+Online.boarding+Seat.comfort +Inflight.entertainment+On.board.service+Leg.room.service+Baggage.handling+Checkin.service+Inflight.service+Cleanliness,data=train_set)
+plot(tree.airline)
+text(tree.airline,pretty=0)
+```
+
+```{r}
+tree.airline
+```
+
+
+# Dự đoán kết quả trên tập test
+```{r}
+pred <- predict(tree.airline, test_set, type = "class")
+actual<-test_set$satisfaction
+```
+
+
+```{r}
+cm<-confusion_matrix(pred, actual)
+cm
+```
+
+
+```{r}
+accuracy(cm)
+```
+
+# Random Forest
+
+```{r}
+set.seed(2)
+rf<-randomForest(satisfaction ~ Age+Customer.Type+Flight.Distance+Inflight.wifi.service +Ease.of.Online.booking+Food.and.drink+Online.boarding+Seat.comfort +Inflight.entertainment+On.board.service+Leg.room.service+Baggage.handling+Checkin.service+Inflight.service+Cleanliness,data=train_set,mtry=4,ntree=100,importance=T)
+```
+
+
+```{r}
+pred <- predict(rf, test_set, type = "class")
+```
+
+
+```{r}
+pred <- predict(rf, test_set, type = "class")
+cm<-confusion_matrix(pred, actual)
+cm
+```
+
+```{r}
+accuracy(cm)
+```
+
+Qua 3 mô hình trên rút ra kết luận randomForest cho performance tốt nhất
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
